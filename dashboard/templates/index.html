@@ -3,25 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <title>Bot Dashboard</title>
-    
+    <meta name="dashboard-key" content="{{ request.app.state.bot.dashboard_key }}">
     <link href="{{ url_for('static', path='style.css') }}" rel="stylesheet">
-
 </head>
 <body>
     <div class="container">
-        <h1>Welcome to the Dashboard for {{ bot_name }}</h1>
-        
+        <h1>Dashboard for {{ bot_name }}</h1>
+        <p>Currently serving: <span id="server-name">{{ server_name }}</span></p>
+
         <h2>Live Stats 📊</h2>
         <ul class="stats-list">
-            <li><strong>Bot Name:</strong> <span>{{ bot_name }}</span></li>
-            <li><strong>Bot ID:</strong> <span>{{ bot_id }}</span></li>
-            <li><strong>Server Count:</strong> <span>{{ guild_count }}</span></li>
-            <li><strong>Latency:</strong> <span>{{ latency_ms }} ms</span></li>
-            
-            <li><strong>Web Server Status:</strong> <span id="status">Loading...</span></li>
+            <li><strong>Server Count:</strong> <span id="guild-count">{{ guild_count }}</span></li>
+            <li><strong>Latency:</strong> <span id="latency">{{ latency_ms }} ms</span></li>
+            <li><strong>Web Server Status:</strong> <span id="status">Online</span></li>
         </ul>
     </div>
-
     <script src="{{ url_for('static', path='script.js') }}"></script>
 </body>
 </html>
