@@ -2,7 +2,7 @@ import os
 import sqlite3
 import psutil
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, Request, Form, Response, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -37,7 +37,6 @@ async def get_current_user(request: Request):
     if session_id == os.getenv("DASHBOARD_SESSION_ID"):
         return session_id
     
-    # If no valid session, redirect to login
     response = RedirectResponse(url="/login")
     raise HTTPException(status_code=303, detail="Redirecting to login", headers={"Location": "/login"})
 
@@ -74,9 +73,9 @@ async def get_session_id(request: Request):
 
 # --- Dashboard and WebSocket Routes ---
 
-# dashboard/app.py (Updated main dashboard route)
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(get_current_user)])
 async def dashboard_page(request: Request):
+    """Serves the main dashboard page."""
     bot = request.app.state.bot
     
     if not bot or not bot.is_ready():
@@ -85,14 +84,13 @@ async def dashboard_page(request: Request):
     bot_name = bot.user.name
     server_name = bot.guilds[0].name if bot.guilds else "N/A"
     
-    # Pass the session ID to the template
     session_id = request.cookies.get("session_id")
 
     context = {
         "request": request,
         "bot_name": bot_name,
         "server_name": server_name,
-        "session_id": session_id,  # <-- NEW: Pass the session ID here
+        "session_id": session_id,
     }
     return templates.TemplateResponse("index.html", context)
 
@@ -102,10 +100,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = Depends(get
     await websocket.accept()
     try:
         while True:
-            # Gather bot and system stats
             bot = websocket.app.state.bot
             
-            # Bot-specific stats
             bot_stats = {
                 "guild_count": len(bot.guilds) if bot and bot.is_ready() else 0,
                 "latency_ms": round(bot.latency * 1000) if bot and bot.is_ready() else "N/A",
@@ -113,7 +109,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = Depends(get
                 "channel_count": sum(len(g.channels) for g in bot.guilds) if bot and bot.is_ready() else 0,
             }
 
-            # System-level stats using psutil
             system_stats = {
                 "cpu_percent": psutil.cpu_percent(interval=1),
                 "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
@@ -126,10 +121,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str = Depends(get
 
             stats_data = {"bot": bot_stats, "system": system_stats}
 
-            # Send the JSON data to the connected client
             await websocket.send_json(stats_data)
             
-            # Wait for a bit before sending the next update
             await asyncio.sleep(5)
     except WebSocketDisconnect:
         print("Client disconnected.")
@@ -139,14 +132,12 @@ DATABASE_DIR = os.path.join(BASE_DIR, "..", "database")
 
 @app.get("/db", response_class=HTMLResponse, dependencies=[Depends(get_current_user)])
 async def list_databases(request: Request):
-    """Lists all available .db files in the database folder."""
     db_files = [f for f in os.listdir(DATABASE_DIR) if f.endswith(".db")]
     context = {"request": request, "db_files": db_files}
     return templates.TemplateResponse("viewer/db_list.html", context)
 
 @app.get("/db/{db_name}", response_class=HTMLResponse, dependencies=[Depends(get_current_user)])
 async def view_database_tables(request: Request, db_name: str):
-    """Lists tables within a specific database file."""
     db_path = os.path.join(DATABASE_DIR, db_name)
     if not os.path.exists(db_path) or not db_path.endswith(".db"):
         raise HTTPException(status_code=404, detail="Database not found")
@@ -174,7 +165,6 @@ async def view_table_data(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100)
 ):
-    """Displays paginated data from a specific table."""
     db_path = os.path.join(DATABASE_DIR, db_name)
     if not os.path.exists(db_path) or not db_path.endswith(".db"):
         raise HTTPException(status_code=404, detail="Database not found")
@@ -218,3 +208,183 @@ async def view_table_data(
         "total_pages": total_pages,
     }
     return templates.TemplateResponse("viewer/db_table_data.html", context)
+
+
+# --- Server Management Routes ---
+
+async def get_guild(request: Request) -> discord.Guild:
+    """Helper to get the main guild object from the bot."""
+    bot = request.app.state.bot
+    if not bot or not bot.is_ready() or not bot.guilds:
+        raise HTTPException(status_code=503, detail="Bot is not ready or not in any guild.")
+    # For a private bot on a single server, we assume the first guild
+    return bot.guilds[0]
+
+
+@app.get("/manage/channels", response_class=HTMLResponse, dependencies=[Depends(get_current_user)])
+async def manage_channels_page(request: Request, guild: discord.Guild = Depends(get_guild)):
+    """Serves the channel management page."""
+    channels = [{"id": c.id, "name": c.name, "type": str(c.type), "category": c.category.name if c.category else "None"} for c in guild.channels]
+    categories = [{"id": c.id, "name": c.name} for c in guild.categories]
+    context = {"request": request, "channels": channels, "categories": categories, "guild_id": guild.id}
+    return templates.TemplateResponse("management/channels.html", context)
+
+@app.post("/api/channels/create", dependencies=[Depends(get_current_user)])
+async def create_channel(
+    guild: discord.Guild = Depends(get_guild),
+    channel_name: str = Form(...),
+    channel_type: str = Form("text"),
+    category_id: Optional[int] = Form(None)
+):
+    try:
+        category = guild.get_channel(category_id) if category_id else None
+        if category_id and (not category or not isinstance(category, discord.CategoryChannel)):
+            raise HTTPException(status_code=400, detail="Invalid category ID.")
+            
+        if channel_type == "text":
+            await guild.create_text_channel(channel_name, category=category)
+        elif channel_type == "voice":
+            await guild.create_voice_channel(channel_name, category=category)
+        elif channel_type == "category":
+            await guild.create_category(channel_name)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid channel type.")
+        return JSONResponse(content={"message": f"{channel_name} created successfully."})
+    except discord.Forbidden:
+        raise HTTPException(status_code=403, detail="Bot lacks permissions to create channels.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating channel: {e}")
+
+@app.post("/api/channels/delete", dependencies=[Depends(get_current_user)])
+async def delete_channel(
+    guild: discord.Guild = Depends(get_guild),
+    channel_id: int = Form(...)
+):
+    try:
+        channel = guild.get_channel(channel_id)
+        if not channel:
+            raise HTTPException(status_code=404, detail="Channel not found.")
+        await channel.delete()
+        return JSONResponse(content={"message": f"Channel '{channel.name}' deleted successfully."})
+    except discord.Forbidden:
+        raise HTTPException(status_code=403, detail="Bot lacks permissions to delete channels.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting channel: {e}")
+
+@app.get("/manage/roles", response_class=HTMLResponse, dependencies=[Depends(get_current_user)])
+async def manage_roles_page(request: Request, guild: discord.Guild = Depends(get_guild)):
+    """Serves the role management page."""
+    roles = [{"id": r.id, "name": r.name, "color": str(r.color), "members": len(r.members)} for r in guild.roles if r.name != "@everyone"]
+    context = {"request": request, "roles": roles, "guild_id": guild.id}
+    return templates.TemplateResponse("management/roles.html", context)
+
+@app.post("/api/roles/create", dependencies=[Depends(get_current_user)])
+async def create_role(
+    guild: discord.Guild = Depends(get_guild),
+    role_name: str = Form(...),
+    color: Optional[str] = Form(None)
+):
+    try:
+        discord_color = discord.Color(int(color.lstrip("#"), 16)) if color else discord.Color.default()
+        await guild.create_role(name=role_name, color=discord_color)
+        return JSONResponse(content={"message": f"Role '{role_name}' created successfully."})
+    except discord.Forbidden:
+        raise HTTPException(status_code=403, detail="Bot lacks permissions to create roles.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating role: {e}")
+
+@app.post("/api/roles/delete", dependencies=[Depends(get_current_user)])
+async def delete_role(
+    guild: discord.Guild = Depends(get_guild),
+    role_id: int = Form(...)
+):
+    try:
+        role = guild.get_role(role_id)
+        if not role or role.is_everyone():
+            raise HTTPException(status_code=404, detail="Role not found or cannot be deleted.")
+        await role.delete()
+        return JSONResponse(content={"message": f"Role '{role.name}' deleted successfully."})
+    except discord.Forbidden:
+        raise HTTPException(status_code=403, detail="Bot lacks permissions to delete roles.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting role: {e}")
+
+@app.get("/manage/members", response_class=HTMLResponse, dependencies=[Depends(get_current_user)])
+async def manage_members_page(request: Request, guild: discord.Guild = Depends(get_guild)):
+    """Serves the member management page."""
+    members = [{"id": m.id, "name": m.display_name, "roles": [r.name for r in m.roles if not r.is_everyone()]} for m in guild.members]
+    roles = [{"id": r.id, "name": r.name} for r in guild.roles if not r.is_everyone()]
+    context = {"request": request, "members": members, "roles": roles, "guild_id": guild.id}
+    return templates.TemplateResponse("management/members.html", context)
+
+@app.post("/api/members/add_role", dependencies=[Depends(get_current_user)])
+async def add_member_role(
+    guild: discord.Guild = Depends(get_guild),
+    member_id: int = Form(...),
+    role_id: int = Form(...)
+):
+    try:
+        member = guild.get_member(member_id)
+        role = guild.get_role(role_id)
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found.")
+        if not role or role.is_everyone():
+            raise HTTPException(status_code=404, detail="Role not found or cannot be assigned.")
+        await member.add_roles(role)
+        return JSONResponse(content={"message": f"Role '{role.name}' added to '{member.display_name}'."})
+    except discord.Forbidden:
+        raise HTTPException(status_code=403, detail="Bot lacks permissions to add roles.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding role: {e}")
+
+@app.post("/api/members/remove_role", dependencies=[Depends(get_current_user)])
+async def remove_member_role(
+    guild: discord.Guild = Depends(get_guild),
+    member_id: int = Form(...),
+    role_id: int = Form(...)
+):
+    try:
+        member = guild.get_member(member_id)
+        role = guild.get_role(role_id)
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found.")
+        if not role or role.is_everyone():
+            raise HTTPException(status_code=404, detail="Role not found or cannot be removed.")
+        await member.remove_roles(role)
+        return JSONResponse(content={"message": f"Role '{role.name}' removed from '{member.display_name}'."})
+    except discord.Forbidden:
+        raise HTTPException(status_code=403, detail="Bot lacks permissions to remove roles.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error removing role: {e}")
+
+@app.post("/api/members/kick", dependencies=[Depends(get_current_user)])
+async def kick_member(
+    guild: discord.Guild = Depends(get_guild),
+    member_id: int = Form(...)
+):
+    try:
+        member = guild.get_member(member_id)
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found.")
+        await member.kick()
+        return JSONResponse(content={"message": f"Member '{member.display_name}' kicked successfully."})
+    except discord.Forbidden:
+        raise HTTPException(status_code=403, detail="Bot lacks permissions to kick members.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error kicking member: {e}")
+
+@app.post("/api/members/ban", dependencies=[Depends(get_current_user)])
+async def ban_member(
+    guild: discord.Guild = Depends(get_guild),
+    member_id: int = Form(...)
+):
+    try:
+        member = guild.get_member(member_id)
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found.")
+        await member.ban()
+        return JSONResponse(content={"message": f"Member '{member.display_name}' banned successfully."})
+    except discord.Forbidden:
+        raise HTTPException(status_code=403, detail="Bot lacks permissions to ban members.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error banning member: {e}")

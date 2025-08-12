@@ -1,0 +1,136 @@
+{% extends "_base.html" %}
+
+{% block title %}Role Management | Bot Dashboard{% endblock %}
+
+{% block content %}
+    <h1>Role Management</h1>
+
+    <div class="message-box" id="role-message"></div>
+
+    <div class="row">
+        <div class="column column-50">
+            <div class="control-group">
+                <h4>Create Role</h4>
+                <form id="create-role-form">
+                    <label for="role_name">Role Name</label>
+                    <input type="text" id="role_name" name="role_name" required>
+                    
+                    <label for="role_color">Role Color (Hex, e.g., #FF0000)</label>
+                    <input type="color" id="role_color" name="color">
+                    <button class="button-primary" type="submit">Create Role</button>
+                </form>
+            </div>
+        </div>
+        <div class="column column-50">
+            <div class="control-group">
+                <h4>Delete Role</h4>
+                <form id="delete-role-form">
+                    <label for="delete_role_id">Select Role to Delete</label>
+                    <select id="delete_role_id" name="role_id" required>
+                        <option value="">-- Select Role --</option>
+                        {% for role in roles %}
+                        <option value="{{ role.id }}">{{ role.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="button-outline" type="submit">Delete Role</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <h2>Existing Roles</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Color</th>
+                <th>Members</th>
+            </tr>
+        </thead>
+        <tbody id="roles-list">
+            {% for role in roles %}
+            <tr>
+                <td>{{ role.id }}</td>
+                <td>{{ role.name }}</td>
+                {% if role.color != '#000000' %}
+                <td style="background-color: {{ role.color }};">{{ role.color }}</td>
+                {% else %}
+                <td>{{ role.color }}</td>
+                {% endif %}
+                <td>{{ role.members }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showMessage(type, message, boxId = 'role-message') {
+        const msgBox = document.getElementById(boxId);
+        msgBox.className = `message-box ${type} show`;
+        msgBox.textContent = message;
+        setTimeout(() => msgBox.classList.remove('show'), 5000);
+    }
+
+    async function refreshRoleList() {
+        const response = await fetch('/manage/roles');
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(await response.text(), 'text/html');
+        
+        const newRolesList = doc.getElementById('roles-list').innerHTML;
+        const newDeleteRolesOptions = doc.getElementById('delete_role_id').innerHTML;
+
+        document.getElementById('roles-list').innerHTML = newRolesList;
+        document.getElementById('delete_role_id').innerHTML = newDeleteRolesOptions;
+    }
+
+    // Create Role Form
+    document.getElementById('create-role-form').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const formData = new FormData(this);
+        try {
+            const response = await fetch('/api/roles/create', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showMessage('success', result.message);
+                this.reset();
+                await refreshRoleList();
+            } else {
+                showMessage('error', result.detail || 'Failed to create role.');
+            }
+        } catch (error) {
+            showMessage('error', 'An error occurred: ' + error.message);
+        }
+    });
+
+    // Delete Role Form
+    document.getElementById('delete-role-form').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const formData = new FormData(this);
+        const confirmDelete = confirm("Are you sure you want to delete this role?");
+        if (!confirmDelete) return;
+
+        try {
+            const response = await fetch('/api/roles/delete', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showMessage('success', result.message);
+                this.reset();
+                await refreshRoleList();
+            } else {
+                showMessage('error', result.detail || 'Failed to delete role.');
+            }
+        } catch (error) {
+            showMessage('error', 'An error occurred: ' + error.message);
+        }
+    });
+</script>
+{% endblock %}

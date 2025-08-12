@@ -6,7 +6,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
     <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
     <style>
-        /* Additional custom styles */
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .container { max-width: 960px; margin: 0 auto; padding: 2rem; }
         header { border-bottom: 1px solid #ddd; padding-bottom: 1rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; }
@@ -14,9 +13,18 @@
         nav a { margin-left: 1rem; text-decoration: none; color: #333; }
         nav a:hover { text-decoration: underline; }
         .button { text-decoration: none; }
-        /* Pagination styles */
         .pagination { margin: 1rem 0; text-align: center; }
         .pagination a { margin: 0 0.5rem; }
+        /* Add new styles for tables in management pages */
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .data-table th, .data-table td { border: 1px solid #eee; padding: 0.8rem; text-align: left; }
+        .data-table th { background-color: #f4f4f4; }
+        .control-group { margin-bottom: 1rem; padding: 1rem; border: 1px solid #eee; background-color: #f9f9f9; border-radius: 5px; }
+        .control-group h4 { margin-top: 0; }
+        .message-box { padding: 10px; margin-bottom: 15px; border-radius: 4px; display: none; }
+        .message-box.success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .message-box.error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        .message-box.show { display: block; }
     </style>
     {% block head_extra %}{% endblock %}
 </head>
@@ -27,6 +35,14 @@
             <nav>
                 <a class="button" href="/">Home</a>
                 <a class="button" href="/db">DB Viewer</a>
+                <details class="dropdown">
+                    <summary class="button" aria-haspopup="true">Manage Server</summary>
+                    <ul class="dropdown-menu">
+                        <li><a href="/manage/channels">Channels</a></li>
+                        <li><a href="/manage/roles">Roles</a></li>
+                        <li><a href="/manage/members">Members</a></li>
+                    </ul>
+                </details>
                 <a class="button button-clear" href="/logout">Logout</a>
             </nav>
         </header>

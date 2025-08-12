@@ -1,0 +1,175 @@
+{% extends "_base.html" %}
+
+{% block title %}Member Management | Bot Dashboard{% endblock %}
+
+{% block content %}
+    <h1>Member Management</h1>
+
+    <div class="message-box" id="member-message"></div>
+
+    <div class="row">
+        <div class="column column-50">
+            <div class="control-group">
+                <h4>Add Role to Member</h4>
+                <form id="add-role-form">
+                    <label for="add_role_member_id">Select Member</label>
+                    <select id="add_role_member_id" name="member_id" required>
+                        <option value="">-- Select Member --</option>
+                        {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="add_role_id">Select Role to Add</label>
+                    <select id="add_role_id" name="role_id" required>
+                        <option value="">-- Select Role --</option>
+                        {% for role in roles %}
+                        <option value="{{ role.id }}">{{ role.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="button-primary" type="submit">Add Role</button>
+                </form>
+            </div>
+
+            <div class="control-group">
+                <h4>Remove Role from Member</h4>
+                <form id="remove-role-form">
+                    <label for="remove_role_member_id">Select Member</label>
+                    <select id="remove_role_member_id" name="member_id" required>
+                        <option value="">-- Select Member --</option>
+                        {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <label for="remove_role_id">Select Role to Remove</label>
+                    <select id="remove_role_id" name="role_id" required>
+                        <option value="">-- Select Role --</option>
+                        {% for role in roles %}
+                        <option value="{{ role.id }}">{{ role.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="button-outline" type="submit">Remove Role</button>
+                </form>
+            </div>
+        </div>
+        <div class="column column-50">
+            <div class="control-group">
+                <h4>Kick Member</h4>
+                <form id="kick-member-form">
+                    <label for="kick_member_id">Select Member to Kick</label>
+                    <select id="kick_member_id" name="member_id" required>
+                        <option value="">-- Select Member --</option>
+                        {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="button-outline" type="submit">Kick Member</button>
+                </form>
+            </div>
+
+            <div class="control-group">
+                <h4>Ban Member</h4>
+                <form id="ban-member-form">
+                    <label for="ban_member_id">Select Member to Ban</label>
+                    <select id="ban_member_id" name="member_id" required>
+                        <option value="">-- Select Member --</option>
+                        {% for member in members %}
+                        <option value="{{ member.id }}">{{ member.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="button-outline" type="submit">Ban Member</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <h2>Existing Members</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Roles</th>
+            </tr>
+        </thead>
+        <tbody id="members-list">
+            {% for member in members %}
+            <tr>
+                <td>{{ member.id }}</td>
+                <td>{{ member.name }}</td>
+                <td>{{ member.roles | join(', ') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function showMessage(type, message, boxId = 'member-message') {
+        const msgBox = document.getElementById(boxId);
+        msgBox.className = `message-box ${type} show`;
+        msgBox.textContent = message;
+        setTimeout(() => msgBox.classList.remove('show'), 5000);
+    }
+
+    async function refreshMemberList() {
+        const response = await fetch('/manage/members');
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(await response.text(), 'text/html');
+        
+        const newMembersList = doc.getElementById('members-list').innerHTML;
+        const newMemberSelects = doc.querySelectorAll('select[name="member_id"]');
+        const newRoleSelects = doc.querySelectorAll('select[name="role_id"]'); // Get new role options too
+
+        document.getElementById('members-list').innerHTML = newMembersList;
+        
+        // Update all member dropdowns
+        const oldMemberSelects = document.querySelectorAll('select[name="member_id"]');
+        oldMemberSelects.forEach((select, index) => {
+            select.innerHTML = newMemberSelects[index] ? newMemberSelects[index].innerHTML : newMemberSelects[0].innerHTML;
+        });
+
+        // Update all role dropdowns
+        const oldRoleSelects = document.querySelectorAll('select[name="role_id"]');
+        oldRoleSelects.forEach((select, index) => {
+            select.innerHTML = newRoleSelects[index] ? newRoleSelects[index].innerHTML : newRoleSelects[0].innerHTML;
+        });
+    }
+
+    // Helper for form submission (reusable)
+    async function handleFormSubmit(event, apiEndpoint) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        
+        let confirmAction = true;
+        if (apiEndpoint.includes('/delete') || apiEndpoint.includes('/kick') || apiEndpoint.includes('/ban')) {
+            confirmAction = confirm("Are you sure you want to perform this action?");
+        }
+
+        if (!confirmAction) return;
+
+        try {
+            const response = await fetch(apiEndpoint, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showMessage('success', result.message);
+                event.target.reset();
+                await refreshMemberList(); // Refresh list after any member action
+            } else {
+                showMessage('error', result.detail || `Failed to perform action on ${apiEndpoint}.`);
+            }
+        } catch (error) {
+            showMessage('error', 'An error occurred: ' + error.message);
+        }
+    }
+
+    // Attach event listeners to all forms
+    document.getElementById('add-role-form').addEventListener('submit', (e) => handleFormSubmit(e, '/api/members/add_role'));
+    document.getElementById('remove-role-form').addEventListener('submit', (e) => handleFormSubmit(e, '/api/members/remove_role'));
+    document.getElementById('kick-member-form').addEventListener('submit', (e) => handleFormSubmit(e, '/api/members/kick'));
+    document.getElementById('ban-member-form').addEventListener('submit', (e) => handleFormSubmit(e, '/api/members/ban'));
+</script>
+{% endblock %}
