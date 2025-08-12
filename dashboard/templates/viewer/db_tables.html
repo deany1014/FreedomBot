@@ -1,0 +1,13 @@
+{% extends "_base.html" %}
+
+{% block title %}Tables | DB Viewer{% endblock %}
+
+{% block content %}
+    <h1>Tables in {{ db_name }}</h1>
+    <p>Select a table to view its data.</p>
+    <ul class="list-tables">
+        {% for table in tables %}
+        <li><a class="button button-clear" href="/db/{{ db_name }}/{{ table }}">{{ table }}</a></li>
+        {% endfor %}
+    </ul>
+{% endblock %}

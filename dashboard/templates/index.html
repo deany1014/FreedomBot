@@ -1,23 +1,88 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Bot Dashboard</title>
-    <meta name="dashboard-key" content="{{ request.app.state.bot.dashboard_key }}">
-    <link href="{{ url_for('static', path='style.css') }}" rel="stylesheet">
-</head>
-<body>
-    <div class="container">
-        <h1>Dashboard for {{ bot_name }}</h1>
-        <p>Currently serving: <span id="server-name">{{ server_name }}</span></p>
+{% extends "_base.html" %}
 
-        <h2>Live Stats 📊</h2>
-        <ul class="stats-list">
-            <li><strong>Server Count:</strong> <span id="guild-count">{{ guild_count }}</span></li>
-            <li><strong>Latency:</strong> <span id="latency">{{ latency_ms }} ms</span></li>
-            <li><strong>Web Server Status:</strong> <span id="status">Online</span></li>
-        </ul>
+{% block title %}Home | Bot Dashboard{% endblock %}
+
+{% block content %}
+    <h1>Dashboard for {{ bot_name }}</h1>
+    <p>Currently serving: <span id="server-name">{{ server_name }}</span></p>
+
+    <div class="row">
+        <div class="column">
+            <h2>Bot Stats 🤖</h2>
+            <ul class="stats-list">
+                <li><strong>Latency:</strong> <span id="latency">Connecting...</span></li>
+                <li><strong>Server Count:</strong> <span id="guild-count">Connecting...</span></li>
+                <li><strong>User Count:</strong> <span id="user-count">Connecting...</span></li>
+                <li><strong>Channel Count:</strong> <span id="channel-count">Connecting...</span></li>
+            </ul>
+        </div>
+        <div class="column">
+            <h2>System Stats 💻</h2>
+            <ul class="stats-list">
+                <li><strong>CPU Usage:</strong> <span id="cpu-percent">Connecting...</span></li>
+                <li><strong>RAM Usage:</strong> <span id="ram-used">Connecting...</span> of <span id="ram-total">Connecting...</span> (<span id="ram-percent">Connecting...</span>)</li>
+                <li><strong>Uptime:</strong> <span id="uptime">Connecting...</span></li>
+                <li><strong>Network I/O (Sent/Recv):</strong> <span id="net-sent">Connecting...</span> / <span id="net-recv">Connecting...</span></li>
+            </ul>
+        </div>
     </div>
-    <script src="{{ url_for('static', path='script.js') }}"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Get the session ID directly from the rendered template
+    const sessionId = "{{ session_id }}";
+
+    function formatUptime(seconds) {
+        // ... (your existing function)
+    }
+
+    function connectWebSocket() {
+        if (!sessionId || sessionId === "None") {
+            console.error("Session ID not found, cannot connect to WebSocket.");
+            return;
+        }
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsHost = window.location.host;
+        const wsUrl = `${wsProtocol}//${wsHost}/ws/stats?session_id=${sessionId}`;
+
+        const websocket = new WebSocket(wsUrl);
+
+        websocket.onopen = function(event) {
+            console.log("WebSocket connected.");
+        };
+
+        websocket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            // Bot Stats
+            document.getElementById('latency').textContent = data.bot.latency_ms + ' ms';
+            document.getElementById('guild-count').textContent = data.bot.guild_count;
+            document.getElementById('user-count').textContent = data.bot.user_count;
+            document.getElementById('channel-count').textContent = data.bot.channel_count;
+
+            // System Stats
+            document.getElementById('cpu-percent').textContent = data.system.cpu_percent + '%';
+            document.getElementById('ram-used').textContent = data.system.ram_used_gb + ' GB';
+            document.getElementById('ram-total').textContent = data.system.ram_total_gb + ' GB';
+            document.getElementById('ram-percent').textContent = data.system.ram_percent + '%';
+            document.getElementById('uptime').textContent = formatUptime(data.system.uptime_seconds);
+            document.getElementById('net-sent').textContent = data.system.network_io_sent_mb + ' MB';
+            document.getElementById('net-recv').textContent = data.system.network_io_recv_mb + ' MB';
+        };
+
+        websocket.onclose = function(event) {
+            console.log("WebSocket disconnected. Attempting to reconnect in 5 seconds...");
+            setTimeout(connectWebSocket, 5000);
+        };
+
+        websocket.onerror = function(error) {
+            console.error("WebSocket error:", error);
+            websocket.close();
+        };
+    }
+
+    connectWebSocket();
+</script>
+{% endblock %}

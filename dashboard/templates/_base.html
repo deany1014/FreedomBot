@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Bot Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.4.1/milligram.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    <style>
+        /* Additional custom styles */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .container { max-width: 960px; margin: 0 auto; padding: 2rem; }
+        header { border-bottom: 1px solid #ddd; padding-bottom: 1rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.5rem; font-weight: bold; }
+        nav a { margin-left: 1rem; text-decoration: none; color: #333; }
+        nav a:hover { text-decoration: underline; }
+        .button { text-decoration: none; }
+        /* Pagination styles */
+        .pagination { margin: 1rem 0; text-align: center; }
+        .pagination a { margin: 0 0.5rem; }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">My Bot Dashboard</div>
+            <nav>
+                <a class="button" href="/">Home</a>
+                <a class="button" href="/db">DB Viewer</a>
+                <a class="button button-clear" href="/logout">Logout</a>
+            </nav>
+        </header>
+        <main>
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

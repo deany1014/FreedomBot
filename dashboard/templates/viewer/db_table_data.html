@@ -1,0 +1,40 @@
+{% extends "_base.html" %}
+
+{% block title %}Data for {{ table_name }} | DB Viewer{% endblock %}
+
+{% block content %}
+    <h1>Data for {{ table_name }} <span class="badge">({{ total_rows }} rows)</span></h1>
+    
+    <div class="table-controls">
+        <a class="button" href="/db/{{ db_name }}">Back to Tables</a>
+    </div>
+
+    <div class="pagination">
+        {% if page > 1 %}
+        <a class="button" href="/db/{{ db_name }}/{{ table_name }}?page={{ page - 1 }}&page_size={{ page_size }}">Previous</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a class="button" href="/db/{{ db_name }}/{{ table_name }}?page={{ page + 1 }}&page_size={{ page_size }}">Next</a>
+        {% endif %}
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                {% for column in columns %}
+                <th>{{ column }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in records %}
+            <tr>
+                {% for column in columns %}
+                <td>{{ record[column] }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
